@@ -125,17 +125,17 @@ class AlphaZero:
 
                 
             self.evaluation_low()
-            win_rate = self.evaluation()
-            if win_rate > 0.45:
-                self.save_model(i)
+            # win_rate = self.evaluation()
+            # if win_rate > 0.45:
+            self.save_model(i)
 
-            if win_rate > 0.55:
-                print("Baseline Model Changed!!!")
-                self.baseline_model = copy.deepcopy(self.model)
-                self.baseline_model.to(self.device)
-                self.baseline_model.eval()
-                for p in self.baseline_model.parameters():
-                    p.requires_grad = False
+            # if win_rate > 0.55:
+            print("Baseline Model Changed!!!")
+            self.baseline_model = copy.deepcopy(self.model)
+            self.baseline_model.to(self.device)
+            self.baseline_model.eval()
+            for p in self.baseline_model.parameters():
+                p.requires_grad = False
     
                 
 
@@ -189,7 +189,7 @@ class AlphaZero:
 
         win_rate = wins/self.PARAMS["EVALUATION_GAMES"]
         print(f"Evaluation : {wins}/{self.PARAMS['EVALUATION_GAMES']} Rate : {win_rate} Draws : {draws}")
-        return win_rate
+        # return win_rate
 
     def random_agent(self, model1):
         state = self.env.reset()
