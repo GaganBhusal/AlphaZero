@@ -18,9 +18,9 @@ PARAMETERS = {
     "BATCH_SIZE" : 128,
     "TOTAL_ITERATIONS" : 200,
     
-    "SEARCHES" : 300,
+    "SEARCHES" : 800,
     "EVALUATION_GAMES" : 50,
-    "EVALUATION_SEARCHES" : 600,
+    "EVALUATION_SEARCHES" : 1000,
     
     "ALPHA" : 0.6,
     "EPSILON" : 0.25,
@@ -30,7 +30,11 @@ PARAMETERS = {
 
 env = Connect4()
 
-model = Resnet(PARAMETERS['IN_CHANNELS'], 
+
+cp1 = 1
+cp2 = 6
+
+model1 = Resnet(PARAMETERS['IN_CHANNELS'], 
                PARAMETERS['OUT_CHANNELS'], 
                PARAMETERS['RESNET_BLOCKS']
               )
@@ -38,34 +42,69 @@ model = Resnet(PARAMETERS['IN_CHANNELS'],
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = "cpu"
-model_checkpoint = torch.load("Checkpoints/checkpoint47.pth", map_location= "cpu")
-model.load_state_dict(model_checkpoint["model"])
-model.to(device)
+model_checkpoint1 = torch.load(f"Checkpoints/checkpoint{cp1}.pth", map_location= "cpu")
+model1.load_state_dict(model_checkpoint1["model"])
+model1.to(device)
 
-model.eval()
+model1.eval()
+
+
+model2 = Resnet(PARAMETERS['IN_CHANNELS'], 
+               PARAMETERS['OUT_CHANNELS'], 
+               PARAMETERS['RESNET_BLOCKS']
+              )
+
+
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = "cpu"
+model_checkpoint = torch.load(f"Checkpoints/checkpoint{cp2}.pth", map_location= "cpu")
+model2.load_state_dict(model_checkpoint["model"])
+model2.to(device)
+
+model2.eval()
+
 
 state = env.reset()
 current_player = 1
 
 while True:
-    root = MCTS(env, state, current_player, model, device, PARAMETERS)
+    root = MCTS(env, state, current_player, model1, device, PARAMETERS)
     actions = root.search()
     action = np.argmax(actions)
     state, result, done = env.step(state, action, current_player)
+
+    print("==" * 70)
+    print(f"\n\n{cp1} Move")
     env.show(state)
+
     if done:
         if result == current_player:
             # wins += 1
-            print("Bot Won!!")
+            print(f"Checkpoint {cp1} Won!!")
         break
     current_player = -current_player
 
-    print(f"Available Moves : {np.where(env.get_valid_moves(state)==1)}")
-    action = int(input("Enter action (0-6) : "))
+    root = MCTS(env, state, current_player, model2, device, PARAMETERS)
+    actions = root.search()
+    action = np.argmax(actions)
     state, result, done = env.step(state, action, current_player)
+
+    print("\n\n")
+    print(f"{cp2} Move\n\n")
+    env.show(state)
+
     if done:
         if result == current_player:
-            print("You Won!!")
+            # wins += 1
+            print(f"Checkpoint {cp2} Won!!")
         break
     current_player = -current_player
-    env.show(state)
+    # print(f"Available Moves : {np.where(env.get_valid_moves(state)==1)}")
+    # action = int(input("Enter action (0-6) : "))
+    # state, result, done = env.step(state, action, current_player)
+    # if done:
+    #     if result == current_player:
+    #         print("You Won!!")
+    #     break
+    # current_player = -current_player
+    # env.show(state)
