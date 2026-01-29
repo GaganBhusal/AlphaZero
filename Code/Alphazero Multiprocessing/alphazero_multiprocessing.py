@@ -10,7 +10,12 @@ from functools import partial
 import torch.nn as nn
 import torch
 from torch import optim
+import os
+from torch.utils.tensorboard import SummaryWriter
 
+
+
+os.makedirs("Checkpoints", exist_ok=True)
 
 def self_play_worker(local_env, model, device, params, game_id):
 
@@ -115,6 +120,7 @@ class AlphaZero:
         self.entropy_per_epoch = []
         self.win_rate = []
 
+        self.writer = SummaryWriter('experiments/Experiment1')
         self.baseline_model = copy.deepcopy(model)
         self.baseline_model.to(device)
         self.baseline_model.eval()
@@ -169,8 +175,8 @@ class AlphaZero:
     def train(self):
         with tqdm(total = self.PARAMS["TOTAL_ITERATIONS"]) as pbar1:
             for i in range(self.PARAMS['TOTAL_ITERATIONS']):
-                print("==" * 45)
-                print(f"Training Iteration {i}")
+                # print("==" * 45)
+                # print(f"Training Iteration {i}")
                 
                 # self.model.to("cpu")
                 self.model.eval()
@@ -200,63 +206,70 @@ class AlphaZero:
                 sum_entropy = 0
 
 
-                with tqdm(total = self.PARAMS["EPOCHS"]) as pbar2:
-                    for epoch in range(self.PARAMS['EPOCHS']):
+                # with tqdm(total = self.PARAMS["EPOCHS"]) as pbar2:
+                for epoch in range(self.PARAMS['EPOCHS']):
 
-                        epoch_loss = 0
-                        batch_count = 0
-                        np.random.shuffle(self.mainBuffer)
-                        for idx in range(0, len(self.mainBuffer), self.PARAMS["BATCH_SIZE"]):
+                    epoch_loss = 0
+                    batch_count = 0
+                    np.random.shuffle(self.mainBuffer)
+                    for idx in range(0, len(self.mainBuffer), self.PARAMS["BATCH_SIZE"]):
 
-                            data = random.sample(self.mainBuffer, self.PARAMS["BATCH_SIZE"])
-                            states, actions, value = zip(*data)
-            
-                            actions = torch.tensor(np.array(actions), dtype = torch.float).to(self.device)
-                            values = torch.tensor(np.array(value), dtype = torch.float).unsqueeze(1).to(self.device)
-                            states = torch.tensor(np.array(states), dtype = torch.float).to(self.device)
+                        data = random.sample(self.mainBuffer, self.PARAMS["BATCH_SIZE"])
+                        states, actions, value = zip(*data)
+        
+                        actions = torch.tensor(np.array(actions), dtype = torch.float).to(self.device)
+                        values = torch.tensor(np.array(value), dtype = torch.float).unsqueeze(1).to(self.device)
+                        states = torch.tensor(np.array(states), dtype = torch.float).to(self.device)
 
-                            model_policy, model_value = self.model(states)
-                            
-                            policy_probs = torch.softmax(model_policy, dim=1)
-                            entropy = -torch.sum(policy_probs * torch.log(policy_probs + 1e-10), dim=1).mean()
-                            
-                            policy_loss = self.policy_loss(model_policy, actions)
-                            value_loss = self.value_loss(model_value, values)
-                            
-                            
-                            total_loss = policy_loss + value_loss - self.entropy_weight * entropy
-                            sum_epoch_loss += total_loss.item()
-                            sum_policy_loss += policy_loss.item()
-                            sum_value_loss += value_loss.item()
-                            sum_entropy += entropy.item()
+                        model_policy, model_value = self.model(states)
+                        
+                        policy_probs = torch.softmax(model_policy, dim=1)
+                        entropy = -torch.sum(policy_probs * torch.log(policy_probs + 1e-10), dim=1).mean()
+                        
+                        policy_loss = self.policy_loss(model_policy, actions)
+                        value_loss = self.value_loss(model_value, values)
+                        
+                        
+                        total_loss = policy_loss + value_loss - self.entropy_weight * entropy
+                        sum_epoch_loss += total_loss.item()
+                        sum_policy_loss += policy_loss.item()
+                        sum_value_loss += value_loss.item()
+                        sum_entropy += entropy.item()
 
-                            self.optimizer.zero_grad()
-                            total_loss.backward()
-                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                            self.optimizer.step()            
+                        self.optimizer.zero_grad()
+                        total_loss.backward()
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                        self.optimizer.step()            
 
-                            epoch_loss += total_loss.item()
-                            batch_count += 1
+                        epoch_loss += total_loss.item()
+                        batch_count += 1
 
-                        avg_loss = epoch_loss/batch_count
-                        avg_policy_loss = sum_policy_loss/batch_count
-                        avg_value_loss = sum_value_loss/batch_count
-                        avg_entropy_loss = sum_entropy/batch_count
-                            
-                        print(f"\tEpoch {epoch}\tTotal Loss : {avg_loss}")
-                        losses.append(avg_loss)
+                    avg_loss = epoch_loss/batch_count
+                    avg_policy_loss = sum_policy_loss/batch_count
+                    avg_value_loss = sum_value_loss/batch_count
+                    avg_entropy_loss = sum_entropy/batch_count
+                        
+                    # print(f"\tEpoch {epoch}\tTotal Loss : {avg_loss}")
+                    losses.append(avg_loss)
 
-                        if avg_loss < 0.01:
-                            print(f"\nLoss very low ({avg_loss:.6f}), stopping early to prevent overfitting")
-                            break
+                    self.avg_loss_per_epoch.append(avg_loss)
+                    self.policy_loss_per_epoch.append(avg_policy_loss)
+                    self.value_loss_per_epoch.append(avg_value_loss)
+                    self.entropy_per_epoch.append(avg_entropy_loss)
 
-                        self.avg_loss_per_epoch.append(avg_loss)
-                        self.policy_loss_per_epoch.append(avg_policy_loss)
-                        self.value_loss_per_epoch.append(avg_value_loss)
-                        self.entropy_per_epoch.append(avg_entropy_loss)
+                    self.writer.add_scalars(
+                        main_tag="Losssss",
+                        tag_scalar_dict={
+                            "Average Loss" : avg_loss,
+                            "Policy Loss" : avg_policy_loss, 
+                            "Value Loss" : avg_value_loss,
+                            "Entropy Loss" : avg_entropy_loss,
+                            },     
+                        global_step=i*epoch+1           
+                    )
 
-                        pbar2.set_postfix(AverageLoss = avg_loss, PolicyLoss = avg_policy_loss, ValueLoss = avg_value_loss, EntropyLoss = avg_entropy_loss)
-                        pbar2.update(1)
+                        # pbar2.set_postfix(AverageLoss = avg_loss, PolicyLoss = avg_policy_loss, ValueLoss = avg_value_loss, EntropyLoss = avg_entropy_loss)
+                        # pbar2.update(1)
                     
                 # self.evaluation_low()
                 win_rate, draws = self.evaluation()
@@ -271,7 +284,25 @@ class AlphaZero:
                 for p in self.baseline_model.parameters():
                     p.requires_grad = False
 
-                pbar1.set_postfix(WinRate = win_rate, Draws = draws)
+                progress_bar_data = {
+                    "Win Rate" : win_rate,
+                    "Draws" : draws,
+                    "Average Loss" : avg_loss,
+                    "Policy Loss" : avg_policy_loss, 
+                    "Value Loss" : avg_value_loss,
+                    "Entropy Loss" : avg_entropy_loss,
+                    }                
+
+                self.writer.add_scalars(
+                    main_tag="Training Data", 
+                    tag_scalar_dict={
+                        "Win Rate" : win_rate,
+                        "Draws" : draws,
+                    },
+                    global_step=i
+                )                
+
+                pbar1.set_postfix(progress_bar_data, refresh=True)
                 pbar1.update(1)
 
     def save_model(self, i):
@@ -281,9 +312,9 @@ class AlphaZero:
             "optimizer_state" : self.optimizer.state_dict()
         }
         torch.save(checkpoint, f'Checkpoints/checkpoint{i}.pth')
-        print(f"\nSaved Checkpoint {i}!!\n")
-        print("==" * 90)
-        print("\n\n\n")
+        # print(f"\nSaved Checkpoint {i}!!\n")
+        # print("==" * 90)
+        # print("\n\n\n")
         
 
     def play_game(self, model1, model2):
